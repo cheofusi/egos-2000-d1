@@ -20,18 +20,15 @@ void mmu_init();
 void timer_init();
 void intr_init();
 
-struct grass *grass = (void*)APPS_STACK_TOP;
-struct earth *earth = (void*)GRASS_STACK_TOP;
-extern char bss_start, bss_end, data_rom, data_start, data_end;
+struct grass *grass = (void*)GRASS_INTERFACE;
+struct earth *earth = (void*)EARTH_INTERFACE;
+extern char bss_start, bss_end;
 
 static void earth_init() {
-    /* Arty board does not support the supervisor mode or page tables */
-    int MISA_SMODE = (1 << 18), misa;
-    asm("csrr %0, misa" : "=r"(misa));
-    earth->platform = (misa & MISA_SMODE)? QEMU : ARTY;
+    earth->platform = D1;
 
     tty_init();
-    CRITICAL("--- Booting on %s ---", earth->platform == QEMU? "QEMU" : "Arty");
+    CRITICAL("--- Booting on the D1 ---");
 
     disk_init();
     SUCCESS("Finished initializing the tty and disk devices");
@@ -49,7 +46,6 @@ static int grass_read(int block_no, char* dst) {
 int main() {
     /* Prepare the bss and data memory regions */
     memset(&bss_start, 0, (&bss_end - &bss_start));
-    memcpy(&data_start, &data_rom, (&data_end - &data_start));
 
     /* Initialize the earth layer */
     earth_init();
@@ -58,7 +54,7 @@ int main() {
     elf_load(0, grass_read, 0, 0);
     if (earth->translation == PAGE_TABLE){
         /* Enter the grass layer in supervisor mode for PAGE_TABLE translation */
-        int mstatus;
+        uint64_t mstatus;
         asm("csrr %0, mstatus" : "=r"(mstatus));
         asm("csrw mstatus, %0" ::"r"((mstatus & ~(3 << 11)) | (1 << 11) | (1 << 18)));
     }

@@ -4,63 +4,50 @@ ENTRY(earth_enter)
 
 MEMORY
 {
-    ram (arw!xi) : ORIGIN = 0x08000000, LENGTH = 0x2000
-    rom (irx!wa) : ORIGIN = 0x20400000, LENGTH = 0x400000
-    disk(irx!wa) : ORIGIN = 0x20800000, LENGTH = 0x400000
-}
-
-PHDRS
-{
-    rom PT_LOAD;
-    ram_init PT_LOAD;
-    ram PT_LOAD;
-    disk PT_LOAD;
+    /* 
+        earth_ro: 128K for .init + .text + .rodata
+        earth_rw: 16K for data, bss and heap
+     */
+    earth_ro : ORIGIN = 0x40000000, LENGTH = 128K
+    earth_rw : ORIGIN = 0x40020000, LENGTH = 16K
 }
 
 SECTIONS
 {
-    /* ROM Sections */
     .init : {
         *(.text.enter)
-    } >rom :rom
+    } >earth_ro
 
     .text : {
         *(.text .text.*)
-    } >rom :rom
+    } >earth_ro
 
     .rodata : {
         *(.rdata)
         *(.rodata .rodata.*)
         . = ALIGN(8);
         *(.srodata .srodata.*)
-    } >rom :rom
+    } >earth_ro
 
-    /* RAM Sections */
     .data : ALIGN(8) {
         *(.data .data.*)
         . = ALIGN(8);
         *(.sdata .sdata.* .sdata2.*)
-    } >ram AT>rom :ram_init
+    } >earth_rw
 
     .bss (NOLOAD): ALIGN(8) {
         *(.sbss*)
         *(.bss .bss.*)
         *(COMMON)
-    } >ram :ram 
+    } >earth_rw
 
-    .heap (NOLOAD) : ALIGN(8) {
+    .heap (NOLOAD): ALIGN(8) {
         PROVIDE( __heap_start = . );
-    } >ram :ram
-
-    .image : {
-        *(.image.placeholder);
-        . += 0x400000;
-    } >disk :disk
+    } >earth_rw
 
     PROVIDE( bss_start = ADDR(.bss) );
     PROVIDE( bss_end = ADDR(.bss) + SIZEOF(.bss) );
-    PROVIDE( data_rom = LOADADDR(.data) );
     PROVIDE( data_start = ADDR(.data) );
     PROVIDE( data_end = ADDR(.data) + SIZEOF(.data) );
-    PROVIDE( __heap_end = ADDR(.data) + 0x2800 );
+    PROVIDE( __heap_end =  ORIGIN(earth_rw) + LENGTH(earth_rw));
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <stdint.h>
 
 struct earth {
     /* CPU interface */
@@ -7,9 +8,9 @@ struct earth {
     int (*intr_register)(void (*handler)(int));
     int (*excp_register)(void (*handler)(int));
 
-    int (*mmu_alloc)(int* frame_no, void** cached_addr);
+    int (*mmu_alloc)(int* frame_no, char** cached_addr);
     int (*mmu_free)(int pid);
-    int (*mmu_map)(int pid, int page_no, int frame_no);
+    int (*mmu_map)(int pid, uintptr_t page_no, int frame_no);
     int (*mmu_switch)(int pid);
 
     /* Devices interface */
@@ -27,7 +28,7 @@ struct earth {
     int (*tty_critical)(const char *format, ...);
 
     /* Some information about earth layer configuration */
-    enum { QEMU, ARTY } platform;
+    enum { D1 } platform;
     enum { PAGE_TABLE, SOFT_TLB } translation;
 };
 
@@ -50,22 +51,46 @@ struct grass {
 extern struct earth *earth;
 extern struct grass *grass;
 
+/**
+ * D1 provides 0x4000 0000---0xBFFF FFFF of DRAM space. The Lichee RV only uses
+ * the bottom 512M, meaning 0x4000 0000---0x6000 0000. We'll stick using to the 
+ * first 2M for now.
+ * 
+ */
+
 /* Memory layout */
+#define MEM_START          0x40000000   /* D1 DRAM location */
+#define MEM_SIZE           0x200000    /* only use 32M */
+#define MEM_END            (MEM_START + MEM_SIZE)
+
 #define PAGE_SIZE          4096
-#define FRAME_CACHE_END    0x80020000
-#define FRAME_CACHE_START  0x80004000  /* 112KB  frame cache           */
-                                       /*        earth interface       */
-#define GRASS_STACK_TOP    0x80003f80  /* 8KB    earth/grass stack     */
-                                       /*        grass interface       */
-#define APPS_STACK_TOP     0x80002000  /* 6KB    app stack             */
-#define SYSCALL_ARG        0x80000400  /* 1KB    system call args      */
-#define APPS_ARG           0x80000000  /* 1KB    app main() argc, argv */
-#define APPS_SIZE          0x00003000  
-#define APPS_ENTRY         0x08005000  /* 12KB   app code+data         */
-#define GRASS_SIZE         0x00002800
-#define GRASS_ENTRY        0x08002800  /* 8KB    grass code+data       */
-                                       /* 12KB   earth data            */
-                                       /* earth code is in QSPI flash  */
+#define FRAME_CACHE_SIZE   1024 * 1024   /* 1M frame cache */
+#define FRAME_CACHE_START  (MEM_END - FRAME_CACHE_SIZE)
+#define FRAME_CACHE_END    MEM_END
+
+#define EARTH_INTERFACE    (FRAME_CACHE_START - 256) /* 256 bytes for struct earth */
+#define GRASS_INTERFACE    (EARTH_INTERFACE - 256) /* 256 bytes fo struct grass */
+
+#define GRASS_STACK_TOP    (GRASS_INTERFACE - 16)
+#define GRASS_STACK_SIZE   8 * 1024     /* 8K earth/grass stack */
+
+#define APPS_STACK_TOP     ((GRASS_STACK_TOP - GRASS_STACK_SIZE) & 0xFFFFF000)
+#define APPS_STACK_SIZE    6 * 1024     /* 6K app stack */
+#define SYSCALL_ARG        (APPS_STACK_TOP - APPS_STACK_SIZE - 1024) /* 1K system call args */
+#define APPS_ARG           (SYSCALL_ARG - 1024) /* 1K app main() argc, argv. Should be a 
+                                                    page boundary 
+                                                */
+
+#define EARTH_ENTRY        MEM_START
+#define EARTH_SIZE         (128 + 16) * 1024    /* 128K + 16K */
+
+#define GRASS_ENTRY        (EARTH_ENTRY + EARTH_SIZE)
+#define GRASS_SIZE         (8 + 4) * 1024   /* 8K + 4K */
+
+#define APPS_ENTRY         (GRASS_ENTRY + GRASS_SIZE) /* should be a page boundary */
+#define APPS_SIZE          16 * 1024    /* 16K virtual address range. So the frame cache supports
+                                           virtualization at most 1M /16k = 64 app processes. 
+                                         */ 
 
 
 #ifndef LIBC_STDIO

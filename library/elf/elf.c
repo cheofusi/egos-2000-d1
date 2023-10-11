@@ -16,7 +16,7 @@
 #include <string.h>
 
 static void load_grass(elf_reader reader,
-                       struct elf32_program_header* pheader) {
+                       struct elf64_program_header* pheader) {
     INFO("Grass kernel file size: 0x%.8x bytes", pheader->p_filesz);
     INFO("Grass kernel memory size: 0x%.8x bytes", pheader->p_memsz);
 
@@ -30,7 +30,7 @@ static void load_grass(elf_reader reader,
 
 static void load_app(int pid, elf_reader reader,
                      int argc, void** argv,
-                     struct elf32_program_header* pheader) {
+                     struct elf64_program_header* pheader) {
 
     /* Debug printing during bootup */
     if (pid < GPID_USER_START) {
@@ -38,12 +38,13 @@ static void load_app(int pid, elf_reader reader,
         INFO("App memory size: 0x%.8x bytes", pheader->p_memsz);
     }
 
-    void* base;
-    int frame_no, block_offset = pheader->p_offset / BLOCK_SIZE;
-    unsigned int code_start = APPS_ENTRY >> 12, stack_start = APPS_ARG >> 12;
+    char* base;
+    int frame_no; 
+    int64_t block_offset = pheader->p_offset / BLOCK_SIZE;
+    uintptr_t code_start = (uintptr_t)APPS_ENTRY >> 12;
 
     /* Setup the text, rodata, data and bss sections */
-    for (int off = 0; off < pheader->p_filesz; off += BLOCK_SIZE) {
+    for (int64_t off = 0; off < pheader->p_filesz; off += BLOCK_SIZE) {
         if (off % PAGE_SIZE == 0) {
             earth->mmu_alloc(&frame_no, &base);
             earth->mmu_map(pid, code_start++, frame_no);
@@ -55,35 +56,38 @@ static void load_app(int pid, elf_reader reader,
     if (last_page_filled)
         memset((char*)base + last_page_filled, 0, last_page_nzeros);
 
-    while (code_start < ((APPS_ENTRY + APPS_SIZE) >> 12)) {
+    while (code_start < (((uintptr_t)APPS_ENTRY + APPS_SIZE) >> 12)) {
         earth->mmu_alloc(&frame_no, &base);
         earth->mmu_map(pid, code_start++, frame_no);
         memset((char*)base, 0, PAGE_SIZE);
     }
 
-    /* Setup two pages for argc, argv and stack */
+    /* Setup 2 pages for argc & argv (1K), syscall args (1k) and stack (6k)*/
+    uintptr_t arg_start = (uintptr_t)APPS_ARG >> 12;
     earth->mmu_alloc(&frame_no, &base);
-    earth->mmu_map(pid, stack_start++, frame_no);
+    earth->mmu_map(pid, arg_start, frame_no);
 
-    int* argc_addr = (int*)base;
-    int* argv_addr = argc_addr + 1;
-    int* args_addr = argv_addr + CMD_NARGS;
+    uintptr_t argc_addr = (uintptr_t)base;
+    uintptr_t argv_addr = argc_addr + sizeof(int);
+    uintptr_t args_addr = argv_addr + CMD_NARGS * sizeof(uintptr_t);
 
-    *argc_addr = argc;
-    if (argv) memcpy(args_addr, argv, argc * CMD_ARG_LEN);
+    *(int *)argc_addr = argc;
+    if (argv) memcpy((void *)args_addr, argv, argc * CMD_ARG_LEN);
     for (int i = 0; i < argc; i++)
-        argv_addr[i] = APPS_ARG + 4 + 4 * CMD_NARGS + i * CMD_ARG_LEN;
+        ((uint64_t *)argv_addr)[i] = APPS_ARG + sizeof(int) 
+                                    + sizeof(uintptr_t) * CMD_NARGS 
+                                    + i * CMD_ARG_LEN;
 
     earth->mmu_alloc(&frame_no, &base);
-    earth->mmu_map(pid, stack_start++, frame_no);
+    earth->mmu_map(pid, arg_start + 1, frame_no);
 }
 
 void elf_load(int pid, elf_reader reader, int argc, void** argv) {
     char buf[BLOCK_SIZE];
     reader(0, buf);
 
-    struct elf32_header *header = (void*) buf;
-    struct elf32_program_header *pheader = (void*)(buf + header->e_phoff);
+    struct elf64_header *header = (void*) buf; 
+    struct elf64_program_header *pheader = (void*)(buf + header->e_phoff);
 
     for (int i = 0; i < header->e_phnum; i++) {
         if (pheader[i].p_memsz == 0) continue;

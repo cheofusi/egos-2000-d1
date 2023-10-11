@@ -6,60 +6,56 @@
 /* Author: Yunhao Zhang
  * Description: _enter of grass, context start and context switch
  */
+
+.macro CTX_SAVE
+    addi sp,sp,-112
+    sd s0,8(sp)     /* Save callee-saved registers */
+    sd s1,16(sp)
+    sd s2,24(sp)
+    sd s3,32(sp)
+    sd s4,40(sp)
+    sd s5,48(sp)
+    sd s6,56(sp)
+    sd s7,64(sp)
+    sd s8,72(sp)
+    sd s9,80(sp)
+    sd s10,88(sp)
+    sd s11,96(sp)
+    sd ra,104(sp)   /* Save return address */
+.endm
+
+.macro CTX_RESTORE
+    ld s0,8(sp)     /* Restore callee-saved registers */
+    ld s1,16(sp)
+    ld s2,24(sp)
+    ld s3,32(sp)
+    ld s4,40(sp)
+    ld s5,48(sp)
+    ld s6,56(sp)
+    ld s7,64(sp)
+    ld s8,72(sp)
+    ld s9,80(sp)
+    ld s10,88(sp)
+    ld s11,96(sp)
+    ld ra,104(sp)   /* Restore return address */
+    addi sp,sp,112
+.endm
+
     .section .text
     .global grass_enter, ctx_start, ctx_switch
 grass_enter:
-    li sp,0x80003f80
+    li sp,0x400FFDF0    /* GRASS_STACK_TOP */
     call main
 
 ctx_start:
-    addi sp,sp,-64
-    sw s0,4(sp)       /* Save callee-saved registers */
-    sw s1,8(sp)
-    sw s2,12(sp)
-    sw s3,16(sp)
-    sw s4,20(sp)
-    sw s5,24(sp)
-    sw s6,28(sp)
-    sw s7,32(sp)
-    sw s8,36(sp)
-    sw s9,40(sp)
-    sw s10,44(sp)
-    sw s11,48(sp)
-    sw ra,52(sp)      /* Save return address */
-    sw sp,0(a0)       /* Save the current stack pointer */
+    CTX_SAVE
+    sd sp,0(a0)       /* Save the current stack pointer */
     mv sp,a1          /* Switch the stack */
     call ctx_entry    /* Call ctx_entry() */
 
 ctx_switch:
-    addi sp,sp,-64
-    sw s0,4(sp)       /* Save callee-saved registers */
-    sw s1,8(sp)
-    sw s2,12(sp)
-    sw s3,16(sp)
-    sw s4,20(sp)
-    sw s5,24(sp)
-    sw s6,28(sp)
-    sw s7,32(sp)
-    sw s8,36(sp)
-    sw s9,40(sp)
-    sw s10,44(sp)
-    sw s11,48(sp)
-    sw ra,52(sp)      /* Save return address */
-    sw sp,0(a0)       /* Save the current stack pointer */
+    CTX_SAVE
+    sd sp,0(a0)       /* Save the current stack pointer */
     mv sp,a1          /* Switch the stack */
-    lw s0,4(sp)       /* Restore callee-saved registers */
-    lw s1,8(sp)
-    lw s2,12(sp)
-    lw s3,16(sp)
-    lw s4,20(sp)
-    lw s5,24(sp)
-    lw s6,28(sp)
-    lw s7,32(sp)
-    lw s8,36(sp)
-    lw s9,40(sp)
-    lw s10,44(sp)
-    lw s11,48(sp)
-    lw ra,52(sp)      /* Restore return address */
-    addi sp,sp,64
+    CTX_RESTORE
     ret

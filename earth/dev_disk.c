@@ -9,31 +9,20 @@
 
 #include "egos.h"
 #include "disk.h"
-#include "sd/sd.h"
-#include "bus_gpio.c"
-#include <string.h>
 
-enum {
-      SD_CARD,
-      FLASH_ROM
-};
-static int type;
+const int sdc_no = 0;
+const int sdc_bus_width = 4;
+
+unsigned long mmc_bread(int dev_num, unsigned long start, unsigned blkcnt, void *dst);
+int sunxi_mmc_init(int sdc_no, unsigned bus_width);
 
 int disk_read(int block_no, int nblocks, char* dst) {
-    if (type == SD_CARD) {
-        sdread(block_no, nblocks, dst);
-    } else {
-        char* src = (char*)0x20800000 + block_no * BLOCK_SIZE;
-        memcpy(dst, src, nblocks * BLOCK_SIZE);
-    }
+    mmc_bread(sdc_no, block_no, nblocks, dst);
     return 0;
 }
 
 int disk_write(int block_no, int nblocks, char* src) {
-    if (type == FLASH_ROM)
-        FATAL("disk_write: Writing to the read-only ROM");
-
-    sdwrite(block_no, nblocks, src);
+    FATAL("Write op not yet implemented");
     return 0;
 }
 
@@ -41,13 +30,5 @@ void disk_init() {
     earth->disk_read = disk_read;
     earth->disk_write = disk_write;
 
-    CRITICAL("Choose a disk:");
-    printf("Enter 0: microSD card\r\nEnter 1: on-board ROM\r\n");
-
-    char buf[2];
-    for (buf[0] = 0; buf[0] != '0' && buf[0] != '1'; earth->tty_read(buf, 2));
-    type = (buf[0] == '0')? SD_CARD : FLASH_ROM;
-    INFO("%s is chosen", type == SD_CARD? "microSD" : "on-board ROM");
-
-    if (type == SD_CARD) sdinit();
+    sunxi_mmc_init(sdc_no, sdc_bus_width);
 }

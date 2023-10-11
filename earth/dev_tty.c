@@ -14,21 +14,25 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-int uart_getc(int* c);
-void uart_putc(int c);
-void uart_init(long baud_rate);
+void uart0_init(int baud_rate);
+void uart0_putc(char c);
+char uart0_getc();
+int uart0_has_data();
 
 static int c, is_reading;
-int tty_recv_intr() { return (is_reading)? 0 : (uart_getc(&c) == 3); }
+int tty_recv_intr() { 
+    if (is_reading) return 0;
+    else return uart0_has_data() && (uart0_getc() == 3); 
+}
 
 int tty_write(char* buf, int len) {
-    for (int i = 0; i < len; i++) uart_putc(buf[i]);
+    for (int i = 0; i < len; i++) uart0_putc(buf[i]);
 }
 
 int tty_read(char* buf, int len) {
     is_reading = 1;
     for (int i = 0; i < len - 1; i++) {
-        for (c = -1; c == -1; uart_getc(&c));
+        c = uart0_getc();
         buf[i] = (char)c;
 
         switch (c) {
@@ -61,7 +65,7 @@ int tty_read(char* buf, int len) {
 
 int tty_printf(const char *format, ...)
 {
-    LOG("", "")
+    LOG("", "") //LOG("\x1B[38;5;250m[DEBUG] ", "\x1B[1;0m\r\n")
     fflush(stdout);
 }
 
@@ -84,11 +88,13 @@ int tty_critical(const char *format, ...)
 }
 
 void tty_init() {
-    /* 115200 is the UART baud rate */
-    uart_init(115200);
 
-    /* Wait for the tty device to be ready */
-    for (int c = 0; c != -1; uart_getc(&c));
+    uart0_init(115200);
+
+    /* Wait for the tty device to be ready
+       TODO: replace with usleep
+     */
+    for (int i = 0; i < 2000000; i++);
 
     earth->tty_read = tty_read;
     earth->tty_write = tty_write;

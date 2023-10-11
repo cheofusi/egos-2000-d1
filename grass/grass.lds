@@ -4,7 +4,13 @@ ENTRY(grass_enter)
 
 MEMORY
 {
-    ram (arw!xi) : ORIGIN = 0x08002800, LENGTH = 0x2800
+    /*
+        grass_ro: 8K for .text + .rodata
+        grass_rw: 4K for data, bss and heap
+     */
+
+    grass_ro : ORIGIN = 0x40024000, LENGTH = 8K
+    grass_rw : ORIGIN = 0x40026000, LENGTH = 4K
 }
 
 PHDRS
@@ -14,34 +20,34 @@ PHDRS
 
 SECTIONS
 {
-    __heap_size = 0x800;
+    __heap_size = 0x800; /* min heap size */
 
     .text : ALIGN(8) {
         *(.text .text.*)
-    } >ram :ram
+    } >grass_ro :ram
 
     .rodata : ALIGN(8) {
         *(.rdata)
         *(.rodata .rodata.*)
         . = ALIGN(8);
         *(.srodata .srodata.*)
-    } >ram :ram
+    } >grass_ro :ram
 
     .data : ALIGN(8) {
         *(.data .data.*)
         . = ALIGN(8);
         *(.sdata .sdata.* .sdata2.*)
-    } >ram :ram
+    } >grass_rw :ram
 
     .bss (NOLOAD): ALIGN(8) {
         *(.sbss*)
         *(.bss .bss.*)
         *(COMMON)
-    } >ram :ram
+    } >grass_rw :ram
 
     .heap (NOLOAD) : ALIGN(8) {
-          PROVIDE( __heap_start = . );
+        PROVIDE( __heap_start = . );
           . = __heap_size;
-    } >ram :ram
-    PROVIDE( __heap_end = 0x08005000 );
+    } >grass_rw :ram
+    PROVIDE( __heap_end = ORIGIN(grass_rw) + LENGTH(grass_rw) );
 }

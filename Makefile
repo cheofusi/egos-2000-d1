@@ -1,40 +1,33 @@
-# BOARD can be a7_35t, a7_100t or s7_50
-BOARD = a7_35t
-QEMU = qemu-system-riscv32
+SD_BLKDEV = /dev/sdb
 
-ifeq ($(TOOLCHAIN), GNU)
-# The official GNU toolchain binaries
-RISCV_CC = riscv32-unknown-elf-gcc -march=rv32im_zicsr
-OBJDUMP = riscv32-unknown-elf-objdump
-OBJCOPY = riscv32-unknown-elf-objcopy
-else
-# GNU toolchain binaries from SiFive
-RISCV_CC = riscv64-unknown-elf-gcc -march=rv32i
+RISCV_CC = riscv64-unknown-elf-gcc -march=rv64im_zicsr_zifencei
 OBJDUMP = riscv64-unknown-elf-objdump
 OBJCOPY = riscv64-unknown-elf-objcopy
-endif
 
 DEBUG = build/debug
 RELEASE = build/release
 
 APPS_DEPS = apps/*.* library/egos.h library/*/*
 GRASS_DEPS = grass/* library/egos.h library/*/*
-EARTH_DEPS = earth/* earth/sd/* library/egos.h library/*/*
+EARTH_DIRS = $(shell find earth/ -type d)
+EARTH_PRIV_INC_DIRS=$(addprefix -I,$(EARTH_DIRS))
+EARTH_DEPS = earth/* earth/modules/*/* library/egos.h library/*/*
 USRAPP_ELFS = $(patsubst %.c, $(RELEASE)/%.elf, $(notdir $(wildcard apps/user/*.c)))
 SYSAPP_ELFS = $(patsubst %.c, $(RELEASE)/%.elf, $(notdir $(wildcard apps/system/*.c)))
 
-LDFLAGS = -nostdlib -lc -lgcc
+LDFLAGS = -nostdlib -lc -lgcc -Wl,--no-warn-rwx-segments
 INCLUDE = -Ilibrary -Ilibrary/elf -Ilibrary/file -Ilibrary/libc -Ilibrary/servers
-CFLAGS = -mabi=ilp32 -Wl,--gc-sections -ffunction-sections -fdata-sections -fdiagnostics-show-option
-COMMON = $(CFLAGS) $(INCLUDE) -D CPU_CLOCK_RATE=65000000
-DEBUG_FLAGS =  --source --all-headers --demangle --line-numbers --wide
+CFLAGS = -mabi=lp64 -Wl,--gc-sections -ffunction-sections -fdata-sections -fdiagnostics-show-option -mtune=thead-c906
+COMMON = $(CFLAGS) $(INCLUDE)
+DEBUG_FLAGS = --source --all-headers --demangle --line-numbers --wide
 
 egos: $(USRAPP_ELFS) $(SYSAPP_ELFS) $(RELEASE)/grass.elf $(RELEASE)/earth.elf
 
 $(RELEASE)/earth.elf: $(EARTH_DEPS)
 	@echo "$(YELLOW)-------- Compile the Earth Layer --------$(END)"
-	$(RISCV_CC) $(COMMON) earth/earth.s $(filter %.c, $(wildcard $^)) -Tearth/earth.lds $(LDFLAGS) -o $@
+	$(RISCV_CC) $(COMMON) $(EARTH_PRIV_INC_DIRS) earth/earth.s $(filter %.c, $(wildcard $^)) -Tearth/earth.lds $(LDFLAGS) -o $@
 	@$(OBJDUMP) $(DEBUG_FLAGS) $@ > $(DEBUG)/earth.lst
+	@$(OBJCOPY) -O binary $@ $(RELEASE)/earth.bin
 
 $(RELEASE)/grass.elf: $(GRASS_DEPS)
 	@echo "$(GREEN)-------- Compile the Grass Layer --------$(END)"
@@ -55,22 +48,27 @@ $(USRAPP_ELFS): $(RELEASE)/%.elf : apps/user/%.c $(APPS_DEPS)
 install: egos
 	@echo "$(GREEN)-------- Create the Disk Image --------$(END)"
 	$(CC) tools/mkfs.c library/file/file.c -DMKFS $(INCLUDE) -o tools/mkfs; cd tools; ./mkfs
-	@echo "$(YELLOW)-------- Create the BootROM Image --------$(END)"
-	cp $(RELEASE)/earth.elf tools/earth.elf
-	$(OBJCOPY) --remove-section=.image tools/earth.elf
-	$(OBJCOPY) -O binary tools/earth.elf tools/earth.bin
-	$(CC) tools/mkrom.c -DCPU_BIN_FILE="\"fpga/freedom/fe310_cpu_$(BOARD).bin\"" -o tools/mkrom
-	cd tools; ./mkrom ; rm earth.elf earth.bin
 
-qemu: install
-	@echo "$(YELLOW)-------- Simulate on QEMU-RISCV --------$(END)"
-	cp $(RELEASE)/earth.elf tools/qemu/qemu.elf
-	$(OBJCOPY) --update-section .image=tools/disk.img tools/qemu/qemu.elf
-	$(QEMU) -readconfig tools/qemu/sifive-e31.cfg -kernel tools/qemu/qemu.elf -nographic
-
-program: install
-	@echo "$(YELLOW)-------- Program the Arty $(BOARD) on-board ROM --------$(END)"
-	cd tools/fpga/openocd; time openocd -f 7series_$(BOARD).txt
+.ONESHELL:
+sd: install
+	@echo "$(YELLOW)-------- Flash the SD card --------$(END)"
+	@echo "Flash egos-2000-d1 to $(SD_BLKDEV) (y/n)?"
+	@read answer
+	@if [ "$${answer}" != "$${answer#[Nn]}" ]; then \
+		exit 0; \
+	fi
+	@if [ ! -b $(SD_BLKDEV) ]; then \
+		echo "$(SD_BLKDEV) does not exist"; \
+		exit 1; \
+	fi
+	@printf "Writing D1 SRAM bootloader..\n"
+	@dd if=boot0/boot0lite-sdcard.bin of=$(SD_BLKDEV) bs=1K seek=8 status=none
+	@printf "Writing Earth layer binary..\n"
+	@dd if=build/release/earth.bin of=$(SD_BLKDEV) bs=1K seek=512 status=none
+	@printf "Writing disk image..\n"
+	@dd if=tools/disk.img of=$(SD_BLKDEV) bs=1K seek=1024 skip=1024 status=none
+	@sync
+	@printf "Flash complete\n"
 
 clean:
 	rm -rf build tools/mkfs tools/mkrom tools/qemu/qemu.elf tools/disk.img tools/bootROM.bin

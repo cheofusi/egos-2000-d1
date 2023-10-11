@@ -16,7 +16,7 @@
 /* Interface of the paging device, see earth/dev_page.c */
 void  paging_init();
 int   paging_invalidate_cache(int frame_id);
-int   paging_write(int frame_id, int page_no);
+int   paging_write(int frame_id, uintptr_t page_no);
 char* paging_read(int frame_id, int alloc_only);
 
 /* Allocation and free of physical frames */
@@ -24,10 +24,10 @@ char* paging_read(int frame_id, int alloc_only);
 struct frame_mapping {
     int use;     /* Is the frame allocated? */
     int pid;     /* Which process owns the frame? */
-    int page_no; /* Which virtual page is the frame mapped to? */
+    uintptr_t page_no; /* Which virtual page is the frame mapped to? */
 } table[NFRAMES];
 
-int mmu_alloc(int* frame_id, void** cached_addr) {
+int mmu_alloc(int* frame_id, char** cached_addr) {
     for (int i = 0; i < NFRAMES; i++)
         if (!table[i].use) {
             *frame_id = i;
@@ -47,7 +47,7 @@ int mmu_free(int pid) {
 }
 
 /* Software TLB Translation */
-int soft_tlb_map(int pid, int page_no, int frame_id) {
+int soft_tlb_map(int pid, uintptr_t page_no, int frame_id) {
     table[frame_id].pid = pid;
     table[frame_id].page_no = page_no;
 }
@@ -67,6 +67,16 @@ int soft_tlb_switch(int pid) {
             memcpy((void*)(table[i].page_no << 12), paging_read(i, 0), PAGE_SIZE);
 
     curr_vm_pid = pid;
+
+    /**
+     * RISC-V does not guarantee that stores to instruction memory will be made 
+     * visible to instruction fetches on a RISC-V hart until that hart executes
+     * a FENCE.I instruction. The D1 seems to make use of this liberty and hence
+     * REQUIRES a FENCE.I instruction for subsequent instruction fetches after the 
+     * above switch to work.
+    */
+     __sync_synchronize();
+    asm volatile ("fence.i");
 }
 
 /* Page Table Translation
@@ -80,51 +90,9 @@ int soft_tlb_switch(int pid) {
  * tables and mmu_switch() will modify satp (page table base register)
  */
 
-#define OS_RWX   0xF
-#define USER_RWX 0x1F
-static unsigned int frame_id, *root, *leaf;
+void setup_identity_region(int pid, unsigned int addr, int npages, int flag) {}
 
-/* 32 is a number large enough for demo purpose */
-static unsigned int* pid_to_pagetable_base[32];
-
-void setup_identity_region(int pid, unsigned int addr, int npages, int flag) {
-    int vpn1 = addr >> 22;
-
-    if (root[vpn1] & 0x1) {
-        // Leaf has been allocated
-        leaf = (void*)((root[vpn1] << 2) & 0xFFFFF000);
-    } else {
-        // Leaf has not been allocated
-        earth->mmu_alloc(&frame_id, (void**)&leaf);
-        table[frame_id].pid = pid;
-        memset(leaf, 0, PAGE_SIZE);
-        root[vpn1] = ((unsigned int)leaf >> 2) | 0x1;
-    }
-
-    /* Setup the entries in the leaf page table */
-    int vpn0 = (addr >> 12) & 0x3FF;
-    for (int i = 0; i < npages; i++)
-        leaf[vpn0 + i] = ((addr + i * PAGE_SIZE) >> 2) | flag;
-}
-
-void pagetable_identity_mapping(int pid) {
-    /* Allocate the root page table and set the page table base (satp) */
-    earth->mmu_alloc(&frame_id, (void**)&root);
-    table[frame_id].pid = pid;
-    memset(root, 0, PAGE_SIZE);
-    pid_to_pagetable_base[pid] = root;
-
-    /* Allocate the leaf page tables */
-    setup_identity_region(pid, 0x02000000, 16, OS_RWX);   /* CLINT */
-    setup_identity_region(pid, 0x10013000, 1, OS_RWX);    /* UART0 */
-    setup_identity_region(pid, 0x10024000, 1, OS_RWX);    /* SPI1 */
-    setup_identity_region(pid, 0x20400000, 1024, OS_RWX); /* boot ROM */
-    setup_identity_region(pid, 0x20800000, 1024, OS_RWX); /* disk image */
-    setup_identity_region(pid, 0x80000000, 1024, OS_RWX); /* DTIM memory */
-
-    for (int i = 0; i < 8; i++)           /* ITIM memory is 32MB on QEMU */
-        setup_identity_region(pid, 0x08000000 + i * 0x400000, 1024, OS_RWX);
-}
+void pagetable_identity_mapping(int pid) {}
 
 int page_table_map(int pid, int page_no, int frame_id) {
     if (pid >= 32) FATAL("page_table_map: pid too large");
@@ -165,42 +133,12 @@ void mmu_init() {
     earth->mmu_alloc = mmu_alloc;
 
     /* Setup a PMP region for the whole 4GB address space */
-    asm("csrw pmpaddr0, %0" : : "r" (0x40000000));
-    asm("csrw pmpcfg0, %0" : : "r" (0xF));
 
     /* Student's code goes here (PMP memory protection). */
 
-    /* Setup PMP TOR region 0x00000000 - 0x20000000 as r/w/x */
-
-    /* Setup PMP NAPOT region 0x20400000 - 0x20800000 as r/-/x */
-
-    /* Setup PMP NAPOT region 0x20800000 - 0x20C00000 as r/-/- */
-
-    /* Setup PMP NAPOT region 0x80000000 - 0x80004000 as r/w/- */
-
     /* Student's code ends here. */
 
-    /* Arty board does not support supervisor mode or page tables */
     earth->translation = SOFT_TLB;
     earth->mmu_map = soft_tlb_map;
     earth->mmu_switch = soft_tlb_switch;
-    if (earth->platform == ARTY) return;
-
-    /* Choose memory translation mechanism in QEMU */
-    CRITICAL("Choose a memory translation mechanism:");
-    printf("Enter 0: page tables\r\nEnter 1: software TLB\r\n");
-
-    char buf[2];
-    for (buf[0] = 0; buf[0] != '0' && buf[0] != '1'; earth->tty_read(buf, 2));
-    earth->translation = (buf[0] == '0') ? PAGE_TABLE : SOFT_TLB;
-    INFO("%s translation is chosen", earth->translation == PAGE_TABLE ? "Page table" : "Software");
-
-    if (earth->translation == PAGE_TABLE) {
-        /* Setup an identity mapping using page tables */
-        pagetable_identity_mapping(0);
-        asm("csrw satp, %0" ::"r"(((unsigned int)root >> 12) | (1 << 31)));
-
-        earth->mmu_map = page_table_map;
-        earth->mmu_switch = page_table_switch;
-    }
 }

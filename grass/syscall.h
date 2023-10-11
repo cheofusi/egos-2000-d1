@@ -2,6 +2,9 @@
 
 #include "servers.h"
 
+#define CLINT_BASE (0x14000000UL)
+#define MSIP0 CLINT_BASE    /* MSIP register */
+
 enum syscall_type {
 	SYS_UNUSED,
 	SYS_RECV,

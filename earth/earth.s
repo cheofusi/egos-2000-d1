@@ -7,7 +7,9 @@
  * Description: boot loader
  * i.e., the first instructions executed by the CPU when boot up
  */
-    .section .image.placeholder
+
+#define GRASS_STACK_TOP 0x41EFFDF0
+
     .section .text.enter
     .global earth_enter, trap_entry_vm
 earth_enter:
@@ -16,18 +18,18 @@ earth_enter:
     csrc mstatus, t0
 
     /* Call main() of earth.c */
-    li sp, 0x80003f80
+    li sp, 0x400FFDF0   /* GRASS_STACK_TOP */
     call main
 
-trap_entry_vm:
-    csrw mscratch, t0
+# trap_entry_vm:
+#     csrw mscratch, t0
 
-    /* Set mstatus.MPRV in order to use virtual addresses */
-    /* If mstatus.MPP is user mode, set it to supervisor mode */
-    li t0, 0x20800
-    csrs mstatus, t0
+#     /* Set mstatus.MPRV in order to use virtual addresses */
+#     /* If mstatus.MPP is user mode, set it to supervisor mode */
+#     li t0, 0x20800
+#     csrs mstatus, t0
 
-    csrr t0, mscratch
+#     csrr t0, mscratch
 
-    /* Jump to trap_entry_arty() without modifying any registers */
-    j trap_entry
+#     /* Jump to trap_entry() without modifying any registers */
+#     j trap_entry

@@ -50,7 +50,7 @@ void intr_entry(int id) {
     if (earth->tty_recv_intr() && curr_pid >= GPID_USER_START) {
         /* User process killed by ctrl+c interrupt */
         INFO("process %d killed by interrupt", curr_pid);
-        asm("csrw mepc, %0" ::"r"(0x800500C));
+        /* TODO */
         return;
     }
 
@@ -67,7 +67,7 @@ void intr_entry(int id) {
 
 void ctx_entry() {
     /* Now on the kernel stack */
-    int mepc, tmp;
+    uintptr_t mepc, tmp;
     asm("csrr %0, mepc" : "=r"(mepc));
     proc_set[proc_curr_idx].mepc = (void*) mepc;
 
@@ -75,7 +75,7 @@ void ctx_entry() {
     kernel_entry();
 
     /* Switch back to the user application stack */
-    mepc = (int)proc_set[proc_curr_idx].mepc;
+    mepc = (uintptr_t)proc_set[proc_curr_idx].mepc;
     asm("csrw mepc, %0" ::"r"(mepc));
     ctx_switch((void**)&tmp, proc_set[proc_curr_idx].sp);
 }
@@ -183,7 +183,7 @@ static void proc_syscall() {
     int type = sc->type;
     sc->retval = 0;
     sc->type = SYS_UNUSED;
-    *((int*)0x2000000) = 0;
+    *((volatile uint64_t *)MSIP0) = 0;
 
     switch (type) {
     case SYS_RECV:

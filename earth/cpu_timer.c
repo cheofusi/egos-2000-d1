@@ -12,28 +12,38 @@
 
 #include "egos.h"
 
-static long long mtime_get() {
-    int low, high;
-    do {
-        high = *(int*)(0x200bff8 + 4);
-        low  = *(int*)(0x200bff8);
-    }  while ( *(int*)(0x200bff8 + 4) != high );
+#define CLINT_BASE (0x14000000UL)
+/* machine timer comparison register (lower 32-bit) */
+#define MTIMECMPL0 (CLINT_BASE + 0x4000)
+/* machine timer comparison register (higher 32-bit) */
+#define MTIMECMPH0 (CLINT_BASE + 0x4004) 
 
-    return (((long long)high) << 32) | low;
+static inline uint64_t mtime_get() {
+    uint64_t cnt;
+    asm volatile (
+        "csrr %0, time\n"
+        : "=r"(cnt)
+        :
+        : "memory"
+    );
+
+    return cnt;
 }
 
-static void mtimecmp_set(long long time) {
-    *(int*)(0x2004000 + 4) = 0xFFFFFFFF;
-    *(int*)(0x2004000 + 0) = (int)time;
-    *(int*)(0x2004000 + 4) = (int)(time >> 32);
+static void mtimecmp_set(uint64_t time) {
+    *((volatile uint32_t *)(MTIMECMPH0)) = 0xFFFFFFFF;
+    *((volatile uint32_t *)(MTIMECMPL0)) = (time & 0xFFFFFFFF);
+    *((volatile uint32_t *)(MTIMECMPH0)) = (time >> 32);
 }
 
+static uint64_t QUANTUM;
 int timer_reset() {
-    mtimecmp_set(mtime_get() + 50000);
-    return 0;
+    uint64_t now = mtime_get();
+    mtimecmp_set(now + QUANTUM);
 }
 
 void timer_init()  {
     earth->timer_reset = timer_reset;
-    mtimecmp_set(0x0FFFFFFFFFFFFFFFUL);
+    QUANTUM = 24 * 1000 * 250; /* 250ms. Timer runs at 24MHz */
+    mtimecmp_set(0xFFFFFFFFFFFFFFFFUL);
 }
