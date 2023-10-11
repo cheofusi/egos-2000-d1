@@ -1,6 +1,6 @@
 ## About
 
-This is a port of the [egos-2000](https://github.com/yhzhang0128/egos-2000/) teaching operating system to Allwinner's D1 chip, using the Sipeed's [Lichee RV](https://wiki.sipeed.com/hardware/en/lichee/RV/RV.html) compute module.
+This is a port of the awesome [egos-2000](https://github.com/yhzhang0128/egos-2000/) teaching operating system to Allwinner's D1 chip, using Sipeed's [Lichee RV](https://wiki.sipeed.com/hardware/en/lichee/RV/RV.html) compute module.
 
 ![Fail to load an image of egos-2000.](references/screenshots/egos-2000-d1.png)
 
