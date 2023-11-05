@@ -60,7 +60,7 @@ extern struct grass *grass;
 
 /* Memory layout */
 #define MEM_START          0x40000000   /* D1 DRAM location */
-#define MEM_SIZE           0x200000    /* only use 32M */
+#define MEM_SIZE           0x200000    /* only use 2M */
 #define MEM_END            (MEM_START + MEM_SIZE)
 
 #define PAGE_SIZE          4096
