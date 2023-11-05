@@ -2,7 +2,7 @@
 
 This is a port of the awesome [egos-2000](https://github.com/yhzhang0128/egos-2000/) teaching operating system to Allwinner's D1 chip, using Sipeed's [Lichee RV](https://wiki.sipeed.com/hardware/en/lichee/RV/RV.html) compute module.
 
-![Fail to load an image of egos-2000.](references/screenshots/egos-2000-d1.png)
+![](references/screenshots/egos-2000-d1.png)
 
 There is no attempt at staying under 2K lines of code. Most of the chip dependent sources were gotten from [FlatHeadBro's D1 baremetal programs](https://github.com/Ouyancheng/FlatHeadBro) (to whom I am immensely grateful) and given a facelift.
 
@@ -10,7 +10,7 @@ There is no attempt at staying under 2K lines of code. Most of the chip dependen
 ### Usages and Documentation
 
 For compiling and running egos-2000-d1, please read [this document](references/USAGES.md).
-The [RISC-V instruction set manual](references/riscv-privileged-v1.10.pdf), [C906 processor manual](references/XuanTie-OpenC906-UserManual.pdf) and [D1 chip manual](references/D1_User_Manual_V0.1_Draft_Version.pdf) processor & chip manuals introduce the privileged ISA and memory map. [egos.h](library/egos.h) details the memory layout
+The [RISC-V instruction set manual](references/riscv-privileged-v1.10.pdf), [C906 processor manual](references/XuanTie-OpenC906-UserManual.pdf) and [D1 chip manual](references/D1_User_Manual_V0.1_Draft_Version.pdf) introduce the privileged ISA and memory map. [egos.h](library/egos.h) details the memory layout
 
 
 #### TODO
