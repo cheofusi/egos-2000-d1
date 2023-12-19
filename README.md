@@ -6,6 +6,7 @@ This is a port of the awesome [egos-2000](https://github.com/yhzhang0128/egos-20
 
 There is no attempt at staying under 2K lines of code. Most of the chip dependent sources were gotten from [FlatHeadBro's D1 baremetal programs](https://github.com/Ouyancheng/FlatHeadBro) (to whom I am immensely grateful) and given a facelift.
 
+The port either runs in M-mode, or M+S+U with Page Tables.
 
 ### Usages and Documentation
 
@@ -14,7 +15,5 @@ The [RISC-V instruction set manual](references/riscv-privileged-v1.10.pdf), [C90
 
 
 #### TODO
-- Implement syscalls with `ecall`
-- M+U with PMP
-- M+S+U with Page Tables
 - Mem paging
+- User-level threading
