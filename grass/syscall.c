@@ -14,9 +14,7 @@
 static struct syscall *sc = (struct syscall*)SYSCALL_ARG;
 
 static void sys_invoke() {
-    /* The standard way of system call is using the `ecall` instruction; 
-     * Switching to ecall is given to students as an exercise */
-    *((volatile uint64_t *)MSIP0) = 1;
+    asm("ecall");
     while (sc->type != SYS_UNUSED);
 }
 
