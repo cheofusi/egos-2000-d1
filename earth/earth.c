@@ -52,9 +52,16 @@ int main() {
 
     /* Load and enter the grass layer */
     elf_load(0, grass_read, 0, 0);
-    if (earth->translation == PAGE_TABLE){
+    if (earth->translation == PAGE_TABLE) {
+        /**
+         * Allow reading time csr in S-mode without triggering illegal instruction exception
+         */
+        uintptr_t mcounteren;
+        asm("csrr %0, mcounteren" : "=r"(mcounteren));
+        asm("csrw mcounteren, %0" :: "r"(mcounteren | (1 << 1)));
+
         /* Enter the grass layer in supervisor mode for PAGE_TABLE translation */
-        uint64_t mstatus;
+        uintptr_t mstatus;
         asm("csrr %0, mstatus" : "=r"(mstatus));
         asm("csrw mstatus, %0" ::"r"((mstatus & ~(3 << 11)) | (1 << 11) | (1 << 18)));
     }

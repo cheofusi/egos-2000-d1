@@ -19,17 +19,22 @@ static void (*excp_handler)(int);
 int intr_register(void (*_handler)(int)) { intr_handler = _handler; }
 int excp_register(void (*_handler)(int)) { excp_handler = _handler; }
 
-void trap_entry_vm(); /* This wrapper function is defined in earth.S */
-void trap_entry()  __attribute__((interrupt ("machine"), aligned(128)));
-void trap_entry() {
+void handle_trap()
+{
     uint64_t mcause;
     asm("csrr %0, mcause" : "=r"(mcause));
-
     int id = mcause & 0x3FF;
     if (mcause & (1lu << 63))
         (intr_handler)? intr_handler(id) : FATAL("trap_entry: interrupt handler not registered");
     else
         (excp_handler)? excp_handler(id) : FATAL("trap_entry: exception handler not registered");
+}
+
+void trap_entry_vm(); /* Defined in earth.S */
+
+void trap_entry()  __attribute__((interrupt ("machine"), aligned(128)));
+void trap_entry() {
+    handle_trap();
 }
 
 void intr_init() {
@@ -38,8 +43,8 @@ void intr_init() {
 
     /* Setup the interrupt/exception entry function */
     if (earth->translation == PAGE_TABLE) {
-        // asm("csrw mtvec, %0" ::"r"(trap_entry_vm));
-        // INFO("Use direct mode and put the address of trap_entry_vm() to mtvec");
+        asm("csrw mtvec, %0" ::"r"(trap_entry_vm));
+        INFO("Use direct mode and put the address of trap_entry_vm() to mtvec");
     } else {
         asm("csrw mtvec, %0" ::"r"(trap_entry));
         INFO("Use direct mode and put the address of trap_entry() to mtvec");

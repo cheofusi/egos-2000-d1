@@ -5,9 +5,7 @@
 
 /* Author: Yunhao Zhang
  * Description: timer reset and initialization
- * mtime is at 0x200bff8 and mtimecmp is at 0x2004000 in the memory map
- * see section 3.1.15 of references/riscv-privileged-v1.10.pdf
- * and section 9.1, 9.3 of references/sifive-fe310-v19p04.pdf
+ * See Chapter 9 of references/XuanTie-OpenC906-UserManual.pdf
  */
 
 #include "egos.h"
@@ -16,7 +14,7 @@
 /* machine timer comparison register (lower 32-bit) */
 #define MTIMECMPL0 (CLINT_BASE + 0x4000)
 /* machine timer comparison register (higher 32-bit) */
-#define MTIMECMPH0 (CLINT_BASE + 0x4004) 
+#define MTIMECMPH0 (CLINT_BASE + 0x4004)
 
 static inline uint64_t mtime_get() {
     uint64_t cnt;
@@ -31,15 +29,26 @@ static inline uint64_t mtime_get() {
 }
 
 static void mtimecmp_set(uint64_t time) {
-    *((volatile uint32_t *)(MTIMECMPH0)) = 0xFFFFFFFF;
-    *((volatile uint32_t *)(MTIMECMPL0)) = (time & 0xFFFFFFFF);
-    *((volatile uint32_t *)(MTIMECMPH0)) = (time >> 32);
+    *((uint32_t *)(MTIMECMPH0)) = 0xFFFFFFFU;
+    *((uint32_t *)(MTIMECMPL0)) = (time & 0xFFFFFFFF);
+    *((uint32_t *)(MTIMECMPH0)) = (time >> 32);
 }
 
 static uint64_t QUANTUM;
 int timer_reset() {
-    uint64_t now = mtime_get();
-    mtimecmp_set(now + QUANTUM);
+    /**
+     * With mstatus.MPRV set, M Mode is unable to modify the MTIMECMP*
+     * registers because loads and stores execute as if the privilege mode was
+     * S-mode. One interesting thing to think about here is where the stack
+     * pointer actually points to after jumping to mtimecmp_set.
+     * 
+     * Another solution to this problem is just to use the D1's extended S-mode
+     * timer compare registers, STIMECMP*, so S-mode can request timer compare
+     * interrupts.
+    */
+    asm("csrc mstatus, %0"::"r"(1 << 17));
+    mtimecmp_set(mtime_get() + QUANTUM);
+    asm("csrs mstatus, %0"::"r"(1 << 17));
 }
 
 void timer_init()  {

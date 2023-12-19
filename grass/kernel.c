@@ -16,26 +16,55 @@
 #include "syscall.h"
 #include <string.h>
 
+static void proc_yield();
+static void proc_syscall();
+static void (*kernel_entry)();
+
+int proc_curr_idx;
+struct process proc_set[MAX_NPROCESS];
+
 #define EXCP_ID_ECALL_U    8
+#define EXCP_ID_ECALL_S    9
 #define EXCP_ID_ECALL_M    11
 
 void excp_entry(int id) {
-    /* Student's code goes here (system call and memory exception). */
+    uintptr_t mepc, mtval;
 
-    /* If id is for system call, handle the system call and return */
+    /* An ecall exception is a system call */
+    if (id == EXCP_ID_ECALL_U || id == EXCP_ID_ECALL_S || EXCP_ID_ECALL_M)
+        kernel_entry = proc_syscall;
 
-    /* Otherwise, kill the process if curr_pid is a user application */
+    else {
+        if (curr_pid >= GPID_USER_START) {
+            /**
+             * non-ecall exception from user app, kill it and return control to
+             * sys_shell
+             */
+            INFO("process %d killed due to exception %d", curr_pid, id);
+            proc_free(curr_pid);
 
-    /* Student's code ends here. */
-    FATAL("excp_entry: kernel got exception %d", id);
+            proc_set_runnable(GPID_SHELL);
+            kernel_entry = proc_yield;
+        }
+
+        else {
+            asm("csrr %0, mepc" : "=r"(mepc));
+            asm("csrr %0, mtval" : "=r"(mtval));
+            INFO("mepc: 0x%08lx, mtval: 0x%08lx", mepc, mtval);
+
+            FATAL("excp_entry: kernel got exception %d", id);
+        }
+    }
+
+    /* increment mepc so on mret we don't trigger the same exception */
+    asm("csrr %0, mepc" : "=r"(mepc));
+    asm("csrw mepc, %0" ::"r"(mepc + 4));
+
+    ctx_start(&proc_set[proc_curr_idx].sp, (void*)GRASS_STACK_TOP);
 }
 
 #define INTR_ID_SOFT       3
 #define INTR_ID_TIMER      7
-
-static void proc_yield();
-static void proc_syscall();
-static void (*kernel_entry)();
 
 int proc_curr_idx;
 struct process proc_set[MAX_NPROCESS];
@@ -47,17 +76,22 @@ void intr_entry(int id) {
         return;
     }
 
-    if (earth->tty_recv_intr() && curr_pid >= GPID_USER_START) {
-        /* User process killed by ctrl+c interrupt */
+    else if (earth->tty_recv_intr() && curr_pid >= GPID_USER_START) {
+        /* User process killed by CTRL+C. Return control to sys_shell */
+        
         INFO("process %d killed by interrupt", curr_pid);
-        /* TODO */
-        return;
+        proc_free(curr_pid);
+        
+        proc_set_runnable(GPID_SHELL);
+        kernel_entry = proc_yield;
     }
 
-    if (id == INTR_ID_SOFT)
+    else if (id == INTR_ID_SOFT)
         kernel_entry = proc_syscall;
+
     else if (id == INTR_ID_TIMER)
         kernel_entry = proc_yield;
+    
     else
         FATAL("intr_entry: got unknown interrupt %d", id);
 
@@ -99,14 +133,6 @@ static void proc_yield() {
     earth->mmu_switch(curr_pid);
     earth->timer_reset();
 
-    /* Student's code goes here (switch privilege level). */
-
-    /* Modify mstatus.MPP to enter machine or user mode during mret
-     * depending on whether curr_pid is a grass server or a user app
-     */
-
-    /* Student's code ends here. */
-
     /* Call the entry point for newly created process */
     if (curr_status == PROC_READY) {
         proc_set_running(curr_pid);
@@ -115,6 +141,18 @@ static void proc_yield() {
         asm("mv a1, %0" ::"r"(APPS_ARG + 4));
         /* Enter application code entry using mret */
         asm("csrw mepc, %0" ::"r"(APPS_ENTRY));
+
+        /* Modify mstatus.MPP to enter machine or user mode during mret
+         * depending on whether the new process is a grass server or a user app
+         */
+        uintptr_t mstatus;
+        asm("csrr %0, mstatus" : "=r"(mstatus));
+        int pp = (curr_pid < GPID_USER_START);
+        asm("csrs mstatus, %0" ::"r"((mstatus & ~(3 << 11)) | (pp << 11)));
+        
+        /* clear mstatus.MPRV because the D1 doesn't */
+        asm("csrc mstatus, %0"::"r"(1 << 17));
+        
         asm("mret");
     }
 
@@ -183,7 +221,6 @@ static void proc_syscall() {
     int type = sc->type;
     sc->retval = 0;
     sc->type = SYS_UNUSED;
-    *((volatile uint64_t *)MSIP0) = 0;
 
     switch (type) {
     case SYS_RECV:
