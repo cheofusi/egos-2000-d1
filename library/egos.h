@@ -58,25 +58,30 @@ extern struct grass *grass;
  * 
  */
 
+#define PAGE_SIZE          4096
+#define PAGE_CNT(x)        ((x) / 4096)
+
 /* Memory layout */
+
 #define MEM_START          0x40000000   /* D1 DRAM location */
 #define MEM_SIZE           0x200000    /* only use 2M */
 #define MEM_END            (MEM_START + MEM_SIZE)
 
-#define PAGE_SIZE          4096
 #define FRAME_CACHE_SIZE   1024 * 1024   /* 1M frame cache */
 #define FRAME_CACHE_START  (MEM_END - FRAME_CACHE_SIZE)
 #define FRAME_CACHE_END    MEM_END
 
-#define EARTH_INTERFACE    (FRAME_CACHE_START - 256) /* 256 bytes for struct earth */
+#define EARTH_INTERFACE    (FRAME_CACHE_START - PAGE_SIZE + 256) /* 256 bytes for struct earth */
 #define GRASS_INTERFACE    (EARTH_INTERFACE - 256) /* 256 bytes fo struct grass */
 
-#define GRASS_STACK_TOP    (GRASS_INTERFACE - 16)
 #define GRASS_STACK_SIZE   8 * 1024     /* 8K earth/grass stack */
+#define GRASS_STACK_BOTTOM (GRASS_INTERFACE - GRASS_STACK_SIZE)
+#define GRASS_STACK_TOP    (GRASS_STACK_BOTTOM + GRASS_STACK_SIZE - 16)
 
-#define APPS_STACK_TOP     ((GRASS_STACK_TOP - GRASS_STACK_SIZE) & 0xFFFFF000)
 #define APPS_STACK_SIZE    6 * 1024     /* 6K app stack */
-#define SYSCALL_ARG        (APPS_STACK_TOP - APPS_STACK_SIZE - 1024) /* 1K system call args */
+#define APPS_STACK_BOTTOM  (GRASS_STACK_BOTTOM - APPS_STACK_SIZE)
+#define APPS_STACK_TOP     (APPS_STACK_BOTTOM + APPS_STACK_SIZE - 16)
+#define SYSCALL_ARG        (APPS_STACK_BOTTOM - 1024) /* 1K system call args */
 #define APPS_ARG           (SYSCALL_ARG - 1024) /* 1K app main() argc, argv. Should be a 
                                                     page boundary 
                                                 */
@@ -89,7 +94,8 @@ extern struct grass *grass;
 
 #define APPS_ENTRY         (GRASS_ENTRY + GRASS_SIZE) /* should be a page boundary */
 #define APPS_SIZE          16 * 1024    /* 16K virtual address range. So the frame cache supports
-                                           virtualization at most 1M /16k = 64 app processes. 
+                                           virtualization at most 1M /16k = 64 app processes in
+                                           SOFT_TLB mode
                                          */ 
 
 

@@ -44,7 +44,7 @@
     .section .text
     .global grass_enter, ctx_start, ctx_switch
 grass_enter:
-    li sp,0x400FFDF0    /* GRASS_STACK_TOP */
+    li sp,0x400FEFF0    /* GRASS_STACK_TOP */
     call main
 
 ctx_start:

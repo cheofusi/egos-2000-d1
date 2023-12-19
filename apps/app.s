@@ -10,6 +10,6 @@
     .global app_enter
 app_enter:
     ld a0, 0(a0) /* a0 holds APPS_ARG, the address of integer argc */
-    li sp,0x400FD000    /* APP_STACK_TOP */
+    li sp, 0x400FCFF0    /* APP_STACK_TOP */
     call main
     call exit
