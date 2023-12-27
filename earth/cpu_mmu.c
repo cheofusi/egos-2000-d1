@@ -179,15 +179,20 @@ void pagetable_identity_mapping(int pid) {
     }
 
     else {
+        /// TODO: set global bit for these regions
+        /* earth */
         setup_identity_region(pid, EARTH_ENTRY, PAGE_CNT(EARTH_SIZE), OS_XWRV);
+        /* grass */
         setup_identity_region(pid, GRASS_ENTRY, PAGE_CNT(GRASS_SIZE), OS_XWRV);
+        /* earth/grass stack */
         setup_identity_region(pid, GRASS_STACK_BOTTOM, PAGE_CNT(GRASS_STACK_SIZE),
                              OS_XWRV);
+        /* earth & grass interfaces */
         setup_identity_region(pid, GRASS_INTERFACE, 1, OS_XWRV);
 
         /**
-         * Only GPID_PROCESS should direct map the FRAME_CACHE region as it is
-         * solely responsible for loading other processes.
+         * Only GPID_PROCESS should direct map the entire FRAME_CACHE region
+         * as it is solely responsible for loading other processes.
          */
         if (pid == GPID_PROCESS)
             setup_identity_region(pid, FRAME_CACHE_START, PAGE_CNT(FRAME_CACHE_SIZE),
